@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  password     String
+  role         Role         @default(COLABORADOR)
+  colaborador  Colaborador? @relation(fields: [colaboradorId], references: [id])
+  colaboradorId String?     @unique
+  createdAt    DateTime     @default(now())
+}
+
+model Colaborador {
+  id           String       @id @default(cuid())
+  nome         String
+  email        String       @unique
+  matricula    String       @unique
+  cargo        String
+  ativo        Boolean      @default(true)
+  user         User?
+  createdAt    DateTime     @default(now())
+
+  emprestimos  Emprestimo[]
+}
+
+
+model EPI {
+  id          String   @id @default(cuid())
+  nome        String
+  categoria   String
+  quantidade  Int
+  validade    DateTime?
+  descricao   String?
+  createdAt   DateTime @default(now())
+  
+  emprestimos Emprestimo[]
+}
+
+model Emprestimo {
+  id           String   @id @default(cuid())
+  colaborador  Colaborador @relation(fields: [colaboradorId], references: [id])
+  colaboradorId String
+  epi          EPI      @relation(fields: [epiId], references: [id])
+  epiId        String
+  quantidade   Int
+  dataEmprestimo DateTime @default(now())
+  dataDevolucao DateTime?
+  dataVencimento DateTime
+  status       EmprestimoStatus @default(ATIVO)
+  
+  @@map("emprestimos")
+}
+
+enum Role {
+  ADMIN
+  COLABORADOR
+}
+
+enum EmprestimoStatus {
+  ATIVO
+  DEVOLVIDO
+  VENCIDO
+}
