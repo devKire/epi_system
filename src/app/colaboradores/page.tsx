@@ -4,7 +4,7 @@ import ColaboradoresListPage from "./colaboradores-list-page";
 export default function ColaboradoresPage() {
   return (
     <AuthGuard requiredRole="ADMIN">
-      <ColaboradoresListPage searchParams={{}} />
+      <ColaboradoresListPage searchParams={Promise.resolve({})} />
     </AuthGuard>
   );
 }
