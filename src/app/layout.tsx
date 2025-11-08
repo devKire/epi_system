@@ -22,7 +22,6 @@ const montserrat = Montserrat({
 // URLs para ícones (você pode substituir por ícones próprios do sistema EPI)
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 const SYSTEM_LOGO = "/epi-system-logo.png"; // Você pode adicionar um logo próprio
-const DEFAULT_ICON = "/favicon.ico";
 
 export const metadata: Metadata = {
   title: "Sistema de Gestão de EPIs - Controle de Equipamentos de Proteção",

@@ -12,11 +12,12 @@ import {
 } from "@/components/ui/card";
 import { db } from "@/lib/prisma";
 
-export default async function EmprestimosPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function EmprestimosPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const status = searchParams.status as string;
 
   const emprestimos = await db.emprestimo.findMany({

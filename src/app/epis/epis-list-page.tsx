@@ -1,4 +1,4 @@
-import { AlertTriangle, Edit, Plus, Shield, Trash2 } from "lucide-react";
+import { AlertTriangle, Edit, Plus, Shield } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,12 @@ import { db } from "@/lib/prisma";
 
 import DeleteEPIButton from "./delete-epi-button";
 
-export default async function EPIsListPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function EPIsListPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const estoque = searchParams.estoque as string;
 
   const epis = await db.ePI.findMany({

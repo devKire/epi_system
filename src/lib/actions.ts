@@ -2,7 +2,6 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import { db } from "@/lib/prisma";
 
@@ -111,6 +110,7 @@ export async function createColaborador(
     }
 
     // Criar colaborador e usuário em transação
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const result = await db.$transaction(async (tx) => {
       // Criar colaborador
       const colaborador = await tx.colaborador.create({

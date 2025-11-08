@@ -5,14 +5,14 @@ import { db } from "@/lib/prisma";
 import EditarColaboradorForm from "./editar-form";
 
 interface PageProps {
-  params: {
-    id: string;
-  };
+  params: Promise<{ id: string }>;
 }
 
 export default async function EditarColaboradorPage({ params }: PageProps) {
+  const { id } = await params; // 👈 await params aqui
+
   const colaborador = await db.colaborador.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
 
   if (!colaborador) {

@@ -14,11 +14,12 @@ import { db } from "@/lib/prisma";
 
 import DeleteColaboradorButton from "./delete-colaborador-button";
 
-export default async function ColaboradoresListPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function ColaboradoresListPage(props: PageProps) {
+  const searchParams = await props.searchParams;
   const search = searchParams.search as string;
   const status = searchParams.status as string;
 
