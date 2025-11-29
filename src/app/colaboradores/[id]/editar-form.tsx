@@ -2,7 +2,7 @@
 
 import type { Colaborador } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { updateColaborador } from "@/lib/actions";
+import Image from "next/image";
 
 interface EditarColaboradorFormProps {
   colaborador: Colaborador;
@@ -30,6 +31,27 @@ export default function EditarColaboradorForm({
     updateColaborador.bind(null, colaborador.id),
     { message: "", errors: {} },
   );
+  const [previewUrl, setPreviewUrl] = useState(colaborador.avatarUrl || "");
+
+  // Efeito para atualizar o preview quando o input mudar
+  useEffect(() => {
+    const handleUrlChange = (event: Event) => {
+      const target = event.target as HTMLInputElement;
+      if (target.name === "avatarUrl") {
+        setPreviewUrl(target.value);
+      }
+    };
+
+    const input = document.getElementById("avatarUrl");
+    input?.addEventListener("input", handleUrlChange);
+
+    return () => {
+      input?.removeEventListener("input", handleUrlChange);
+    };
+  }, []);
+
+  // Ou usando estado controlado (abordagem mais moderna):
+  const [avatarUrl, setAvatarUrl] = useState(colaborador.avatarUrl || "");
 
   useEffect(() => {
     if (state.success) {
@@ -119,6 +141,50 @@ export default function EditarColaboradorForm({
               {state.errors?.cargo && (
                 <div id="cargo-error" className="text-sm text-red-600">
                   {state.errors.cargo[0]}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="avatarUrl">Foto de Perfil</Label>
+              <Input
+                id="avatarUrl"
+                name="avatarUrl"
+                defaultValue={colaborador.avatarUrl}
+                onChange={(e) => setPreviewUrl(e.target.value)}
+                required
+                aria-describedby="avatarUrl-error"
+                placeholder="Cole a URL da imagem aqui"
+              />
+
+              {/* Preview da imagem */}
+              <div className="flex flex-col items-center gap-2">
+                {previewUrl ? (
+                  <div className="relative">
+                    <Image
+                      src={previewUrl}
+                      alt="Preview do avatar"
+                      width={200}
+                      height={200}
+                      className="h-[200px] w-[200px] rounded-full border border-white/20 object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-[200px] w-[200px] items-center justify-center rounded-full border-2 border-dashed border-gray-300 bg-gray-50">
+                    <span className="px-4 text-center text-sm text-gray-500">
+                      Preview aparecerá aqui
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {state.errors?.avatarUrl && (
+                <div id="avatarUrl-error" className="text-sm text-red-600">
+                  {state.errors.avatarUrl[0]}
                 </div>
               )}
             </div>

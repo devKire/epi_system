@@ -1,4 +1,5 @@
 import { Edit, Plus, Users } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -86,8 +87,14 @@ export default async function ColaboradoresListPage(props: PageProps) {
                 className="flex items-center justify-between rounded-lg border p-4"
               >
                 <div className="flex items-center space-x-4">
-                  <div className="bg-primary/10 rounded-full p-2">
-                    <Users className="text-primary h-6 w-6" />
+                  <div className="bg-primary/10 justify-centershadow-smborder border-primary/5 flex items-center rounded-full p-1">
+                    <Image
+                      src={colaborador.avatarUrl}
+                      alt={colaborador.nome}
+                      width={64}
+                      height={64}
+                      className="h-8 w-8 rounded-full border border-white/20 object-cover sm:h-9 sm:w-9 md:h-10 md:w-10 lg:h-12 lg:w-12"
+                    />
                   </div>
                   <div>
                     <h3 className="font-semibold">{colaborador.nome}</h3>

@@ -1,2 +1,5 @@
 {
+    "editor.formatOnSaveMode": "file",
+    "editor.defaultFormatter": "rvest.vs-code-prettier-eslint",
+    "editor.formatOnSave": true
 }

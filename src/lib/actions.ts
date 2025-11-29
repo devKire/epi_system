@@ -11,6 +11,7 @@ export type ActionState = {
   errors?: {
     nome?: string[];
     email?: string[];
+    avatarUrl?: string[];
     matricula?: string[];
     cargo?: string[];
   };
@@ -55,6 +56,7 @@ export async function createColaborador(
   // Extrair dados do form
   const nome = formData.get("nome") as string;
   const email = formData.get("email") as string;
+  const avatarUrl = formData.get("avatarUrl") as string;
   const matricula = formData.get("matricula") as string;
   const cargo = formData.get("cargo") as string;
   const ativo = formData.get("ativo") === "on";
@@ -69,6 +71,10 @@ export async function createColaborador(
 
   if (!email || !email.includes("@")) {
     errors.email = ["Email inválido"];
+  }
+
+  if (!avatarUrl || avatarUrl.trim().length < 5) {
+    errors.avatarUrl = ["URL da foto de perfil é obrigatória"];
   }
 
   if (!matricula || matricula.trim().length < 1) {
@@ -117,6 +123,7 @@ export async function createColaborador(
         data: {
           nome: nome.trim(),
           email: email.trim().toLowerCase(),
+          avatarUrl: avatarUrl.trim(),
           matricula: matricula.trim(),
           cargo: cargo.trim(),
           ativo,
@@ -154,6 +161,7 @@ export async function updateColaborador(
 ): Promise<ActionState> {
   const nome = formData.get("nome") as string;
   const email = formData.get("email") as string;
+  const avatarUrl = formData.get("avatarUrl") as string;
   const matricula = formData.get("matricula") as string;
   const cargo = formData.get("cargo") as string;
   const ativo = formData.get("ativo") === "on";
@@ -166,6 +174,10 @@ export async function updateColaborador(
 
   if (!email || !email.includes("@")) {
     errors.email = ["Email inválido"];
+  }
+
+  if (!avatarUrl || avatarUrl.trim().length < 5) {
+    errors.avatarUrl = ["URL da foto de perfil é obrigatória"];
   }
 
   if (!matricula || matricula.trim().length < 1) {
@@ -218,6 +230,7 @@ export async function updateColaborador(
       data: {
         nome: nome.trim(),
         email: email.trim().toLowerCase(),
+        avatarUrl: avatarUrl.trim(),
         matricula: matricula.trim(),
         cargo: cargo.trim(),
         ativo,
