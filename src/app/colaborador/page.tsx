@@ -13,6 +13,8 @@ import {
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 
+import { Navbar } from "../components/navbar";
+
 export default async function ColaboradorPage() {
   const session = await getServerSession(authOptions);
 
@@ -72,6 +74,8 @@ export default async function ColaboradorPage() {
   });
 
   return (
+    <>
+      <Navbar />
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
@@ -231,5 +235,6 @@ export default async function ColaboradorPage() {
         </Card>
       )}
     </div>
+     </>
   );
 }

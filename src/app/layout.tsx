@@ -6,7 +6,6 @@ import { Suspense } from "react";
 import { Toaster } from "sonner";
 
 import { AuthProvider } from "./components/auth-provider";
-import { Navbar } from "./components/navbar";
 
 // Fontes do Google via next/font com otimização
 const inter = Inter({
@@ -153,20 +152,6 @@ function LoadingFallback() {
   );
 }
 
-// Fallback simples para componentes menores
-function SimpleFallback() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 bg-blue-600 rounded-full animate-bounce mx-auto mb-4"></div>
-        <div className="text-gray-600 font-medium">Carregando sistema...</div>
-        <div className="text-sm text-gray-500 mt-2">
-          Sistema de Gestão de EPIs
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function RootLayout({
   children,
@@ -268,7 +253,6 @@ export default function RootLayout({
         <Suspense fallback={<LoadingFallback />}>
           <div className="flex min-h-screen flex-col">
             <AuthProvider>
-              <Navbar />
               <main className="flex-1">{children}</main>
             </AuthProvider>
           </div>

@@ -1,12 +1,17 @@
-import { getServerSession } from "next-auth";
+"use client";
 
-import { authOptions } from "@/lib/auth";
+import { useSession } from "next-auth/react";
 
 import { AdminNavbar } from "./admin-navbar";
 import { ColaboradorNavbar } from "./colaborador-navbar";
+import { NavbarSkeleton } from "./navbar-skeleton"; 
 
-export async function Navbar() {
-  const session = await getServerSession(authOptions);
+export function Navbar() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") {
+    return <NavbarSkeleton />;
+  }
 
   if (!session) {
     return null;
