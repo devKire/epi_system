@@ -1,4 +1,5 @@
 import { AlertTriangle, Calendar, Package } from "lucide-react";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 
@@ -13,7 +14,6 @@ import {
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/prisma";
 
-import Image from "next/image";
 import { Navbar } from "../components/navbar";
 
 export default async function ColaboradorPage() {

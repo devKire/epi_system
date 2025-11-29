@@ -1,4 +1,4 @@
-import { Edit, Plus, Users } from "lucide-react";
+import { Edit, Plus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Colaborador } from "@prisma/client";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
@@ -17,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { updateColaborador } from "@/lib/actions";
-import Image from "next/image";
 
 interface EditarColaboradorFormProps {
   colaborador: Colaborador;
@@ -49,9 +49,6 @@ export default function EditarColaboradorForm({
       input?.removeEventListener("input", handleUrlChange);
     };
   }, []);
-
-  // Ou usando estado controlado (abordagem mais moderna):
-  const [avatarUrl, setAvatarUrl] = useState(colaborador.avatarUrl || "");
 
   useEffect(() => {
     if (state.success) {
