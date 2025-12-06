@@ -123,7 +123,7 @@ export async function createColaborador(
 
     // Criar colaborador e usuário em transação
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const result = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx:any) => {
       // Criar colaborador
       const colaborador = await tx.colaborador.create({
         data: {
@@ -586,7 +586,7 @@ export async function createEmprestimo(
     }
 
     // Criar empréstimo e atualizar estoque em uma transação
-    const result = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx: any) => {
       // Se não for FORNECIDO, atualizar estoque da EPI
       if (status !== "FORNECIDO") {
         await tx.ePI.update({
@@ -820,7 +820,7 @@ export async function registrarDevolucao(
     }
 
     // Registrar devolução em transação
-    await db.$transaction(async (tx) => {
+    await db.$transaction(async (tx : any) => {
       // Para status de devolução, restaurar estoque (exceto PERDIDO)
       if (status !== "PERDIDO" && emprestimo.status !== "FORNECIDO") {
         await tx.ePI.update({
@@ -882,103 +882,177 @@ export async function registrarDevolucao(
   }
 }
 
+
 export async function getRelatoriosData() {
   try {
-    const [
-      emprestimosPorMes,
-      episMaisEmprestados,
-      colaboradoresMaisAtivos,
-      statusEmprestimos,
-      emprestimosVencidosPorMes,
-      categoriasMaisEmprestadas,
-      stats,
-    ] = await Promise.all([
-      // Empréstimos por mês (últimos 6 meses)
-      db.$queryRaw<Array<{ mes: string; total: number }>>`
-        SELECT 
-          TO_CHAR("dataEmprestimo", 'YYYY-MM') as mes,
-          COUNT(*)::int as total
-        FROM "emprestimos" 
-        WHERE "dataEmprestimo" >= CURRENT_DATE - INTERVAL '6 months'
-        GROUP BY TO_CHAR("dataEmprestimo", 'YYYY-MM')
-        ORDER BY mes
-      `,
+    // Contagens básicas
+    const totalEPIs = await db.ePI.count()
+    const totalEmprestimos = await db.emprestimo.count()
+    const colaboradoresAtivos = await db.colaborador.count({
+      where: { ativo: true }
+    })
 
-      // EPIs mais emprestados
-      db.ePI.findMany({
-        include: {
-          _count: { select: { emprestimos: true } },
+    // Empréstimos por status
+    const emprestimosPorStatus = await db.emprestimo.groupBy({
+      by: ['status'],
+      _count: true,
+      orderBy: {
+        _count: {
+          id: 'desc'
+        }
+      }
+    })
+
+    // Empréstimos por mês (últimos 6 meses)
+    const seisMesesAtras = new Date()
+    seisMesesAtras.setMonth(seisMesesAtras.getMonth() - 6)
+
+    const emprestimosPorMes = await db.emprestimo.groupBy({
+      by: ['dataEmprestimo'],
+      _count: true,
+      where: {
+        dataEmprestimo: {
+          gte: seisMesesAtras
+        }
+      },
+      orderBy: {
+        dataEmprestimo: 'asc'
+      }
+    })
+
+    // EPIs por categoria
+    const episPorCategoria = await db.ePI.groupBy({
+      by: ['categoria'],
+      _sum: {
+        quantidade: true
+      },
+      orderBy: {
+        _sum: {
+          quantidade: 'desc'
+        }
+      }
+    })
+
+    // Top colaboradores (mais empréstimos)
+    const topColaboradores = await db.emprestimo.groupBy({
+      by: ['colaboradorId'],
+      _count: true,
+      orderBy: {
+        _count: {
+          id: 'desc'
+        }
+      },
+      take: 5
+    })
+
+    // EPIs com baixo estoque (< 10)
+    const episBaixoEstoque = await db.ePI.findMany({
+      where: {
+        quantidade: {
+          lt: 10
+        }
+      },
+      orderBy: {
+        quantidade: 'asc'
+      }
+    })
+
+    // Empréstimos atrasados
+    const hoje = new Date()
+    const emprestimosAtrasados = await db.emprestimo.findMany({
+      where: {
+        dataVencimento: {
+          lt: hoje
         },
-        orderBy: { emprestimos: { _count: "desc" } },
-        take: 8,
-      }),
+        status: {
+          in: ['EMPRESTADO', 'EM_USO', 'FORNECIDO']
+        }
+      },
+      include: {
+        colaborador: true,
+        epi: true
+      }
+    })
 
-      // Colaboradores mais ativos
-      db.colaborador.findMany({
-        include: {
-          _count: { select: { emprestimos: true } },
-        },
-        where: { ativo: true },
-        orderBy: { emprestimos: { _count: "desc" } },
-        take: 8,
-      }),
+    // Empréstimos ativos
+    const emprestimosAtivos = await db.emprestimo.count({
+      where: {
+        status: {
+          in: ['EMPRESTADO', 'EM_USO', 'FORNECIDO']
+        }
+      }
+    })
 
-      // Status dos empréstimos
-      db.emprestimo.groupBy({
-        by: ["status"],
-        _count: { _all: true },
-      }),
+    // Empréstimos concluídos
+    const emprestimosConcluidos = await db.emprestimo.count({
+      where: {
+        status: 'DEVOLVIDO'
+      }
+    })
 
-      // Empréstimos vencidos por mês
-      db.$queryRaw<Array<{ mes: string; total: number }>>`
-        SELECT 
-          TO_CHAR("dataVencimento", 'YYYY-MM') as mes,
-          COUNT(*)::int as total
-        FROM "emprestimos" 
-        WHERE "dataVencimento" >= CURRENT_DATE - INTERVAL '6 months'
-          AND "status" = 'ATIVO'
-          AND "dataVencimento" < CURRENT_DATE
-        GROUP BY TO_CHAR("dataVencimento", 'YYYY-MM')
-        ORDER BY mes
-      `,
-
-      // Categorias mais emprestadas
-      db.$queryRaw<Array<{ categoria: string; total: number }>>`
-        SELECT 
-          e."categoria",
-          COUNT(*)::int as total
-        FROM "emprestimos" emp
-        JOIN "EPI" e ON emp."epiId" = e.id
-        WHERE emp."dataEmprestimo" >= CURRENT_DATE - INTERVAL '6 months'
-        GROUP BY e."categoria"
-        ORDER BY total DESC
-        LIMIT 6
-      `,
-
-      // Estatísticas gerais
-      Promise.all([
-        db.emprestimo.count(),
-        db.emprestimo.count({ where: { status: "EMPRESTADO" } }),
-        db.emprestimo.count({
-          where: { status: "EMPRESTADO", dataVencimento: { lt: new Date() } },
-        }),
-        db.colaborador.count({ where: { ativo: true } }),
-        db.ePI.count(),
-        db.ePI.count({ where: { quantidade: { lt: 5 } } }),
-      ]),
-    ]);
+    // Formatar os dados para resposta
+    const resultado = {
+      estatisticas: {
+        totalEPIs,
+        totalEmprestimos,
+        colaboradoresAtivos,
+        emprestimosAtrasados: emprestimosAtrasados.length,
+        emprestimosAtivos,
+        emprestimosConcluidos
+      },
+      emprestimosPorStatus: emprestimosPorStatus.map((item: any)  => ({
+        status: item.status,
+        quantidade: item._count
+      })),
+      emprestimosPorMes: emprestimosPorMes.map((item: any)  => {
+        const data = new Date(item.dataEmprestimo)
+        return {
+          mes: `${data.getMonth() + 1}/${data.getFullYear()}`,
+          quantidade: item._count
+        }
+      }).slice(-6), // Últimos 6 meses
+      episPorCategoria: episPorCategoria.map((item: any) => ({
+        categoria: item.categoria,
+        quantidade: item._sum.quantidade || 0
+      })),
+      topColaboradores: await Promise.all(
+        topColaboradores.map(async (item : any) => {
+          const colaborador = await db.colaborador.findUnique({
+            where: { id: item.colaboradorId }
+          })
+          return {
+            nome: colaborador?.nome || 'Desconhecido',
+            quantidade: item._count
+          }
+        })
+      ),
+      episBaixoEstoque: episBaixoEstoque.map((item: any)  => ({
+        nome: item.nome,
+        quantidade: item.quantidade,
+        categoria: item.categoria
+      })),
+      emprestimosAtrasadosDetalhes: emprestimosAtrasados.map((item: any)  => {
+        const diasAtraso = Math.floor(
+          (hoje.getTime() - item.dataVencimento.getTime()) / (1000 * 60 * 60 * 24)
+        )
+        return {
+          colaborador: item.colaborador.nome,
+          epi: item.epi.nome,
+          dataVencimento: item.dataVencimento.toISOString(),
+          diasAtraso
+        }
+      })
+    }
 
     return {
-      emprestimosPorMes,
-      episMaisEmprestados,
-      colaboradoresMaisAtivos,
-      statusEmprestimos,
-      emprestimosVencidosPorMes,
-      categoriasMaisEmprestadas,
-      stats,
-    };
+      success: true,
+      data: resultado
+    }
   } catch (error) {
-    console.error("Erro ao buscar dados dos relatórios:", error);
-    throw new Error("Falha ao carregar dados dos relatórios");
+    console.error("Erro ao buscar dados para relatórios:", error)
+    return {
+      success: false,
+      error: "Erro ao carregar dados dos relatórios"
+    }
   }
 }

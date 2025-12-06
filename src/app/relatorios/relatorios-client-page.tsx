@@ -30,6 +30,45 @@ import {
 } from "@/components/ui/card";
 import { getRelatoriosData } from "@/lib/actions";
 
+// Tipos dos dados
+interface RelatoriosData {
+  estatisticas: {
+    totalEPIs: number;
+    totalEmprestimos: number;
+    colaboradoresAtivos: number;
+    emprestimosAtrasados: number;
+    emprestimosAtivos: number;
+    emprestimosConcluidos: number;
+  };
+  emprestimosPorStatus: Array<{
+    status: string;
+    quantidade: number;
+  }>;
+  emprestimosPorMes: Array<{
+    mes: string;
+    quantidade: number;
+  }>;
+  episPorCategoria: Array<{
+    categoria: string;
+    quantidade: number;
+  }>;
+  topColaboradores: Array<{
+    nome: string;
+    quantidade: number;
+  }>;
+  episBaixoEstoque: Array<{
+    nome: string;
+    quantidade: number;
+    categoria: string;
+  }>;
+  emprestimosAtrasadosDetalhes: Array<{
+    colaborador: string;
+    epi: string;
+    dataVencimento: string;
+    diasAtraso: number;
+  }>;
+}
+
 // Skeleton loader para os gráficos
 const ChartSkeleton = () => (
   <div className="animate-pulse">
@@ -37,199 +76,170 @@ const ChartSkeleton = () => (
   </div>
 );
 
-// Função auxiliar para formatar meses
-const formatarMes = (mesString: string) => {
-  const [ano, mes] = mesString.split("-");
-  const meses = [
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez",
-  ];
-  return `${meses[parseInt(mes) - 1]}/${ano}`;
+// Cores para gráficos
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
+// Função para formatar data
+const formatarData = (data: string) => {
+  return new Date(data).toLocaleDateString('pt-BR');
 };
 
 export default function RelatoriosPage() {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<RelatoriosData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const relatoriosData = await getRelatoriosData();
-        setData(relatoriosData);
-      } catch (err) {
-        setError("Erro ao carregar dados dos relatórios");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
+    carregarDados();
   }, []);
 
-  const exportarRelatorio = () => {
+  const carregarDados = async () => {
     try {
-      setExporting(true);
-
-      if (!data) {
-        alert("Nenhum dado disponível para exportar");
-        return;
+      setLoading(true);
+      const resultado = await getRelatoriosData();
+      
+      if (resultado.success && resultado.data) {
+        setData(resultado.data);
+      } else {
+        throw new Error(resultado.error || "Erro ao carregar dados");
       }
+    } catch (err) {
+      console.error("Erro ao carregar relatórios:", err);
+      setError(err instanceof Error ? err.message : "Erro desconhecido");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const exportarRelatorio = async () => {
+    if (!data) return;
+    
+    setExporting(true);
+    try {
       const doc = new jsPDF();
-
-      doc.setFontSize(18);
-      doc.text("Relatório de EPIs", 14, 20);
-      doc.setFontSize(11);
-      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 28);
-
-      // Formatar dados para o PDF (igual ao usado nos gráficos)
-      const chartData = (data.emprestimosPorMes as any[]).map((item: any) => ({
-        mes: item.mes,
-        total: Number(item.total),
-      }));
-
-      const pieData = (data.statusEmprestimos as any[]).map((item: any) => ({
-        name:
-          item.status === "ATIVO"
-            ? "Ativos"
-            : item.status === "DEVOLVIDO"
-              ? "Devolvidos"
-              : "Vencidos",
-        value: item._count._all,
-      }));
-
-      const epiData = data.episMaisEmprestados.map((epi: any) => ({
-        name:
-          epi.nome.length > 15 ? epi.nome.substring(0, 15) + "..." : epi.nome,
-        emprestimos: epi._count.emprestimos,
-        quantidade: epi.quantidade,
-      }));
-
-      const colaboradoresData = data.colaboradoresMaisAtivos.map(
-        (colab: any) => ({
-          name:
-            colab.nome.length > 15
-              ? colab.nome.substring(0, 15) + "..."
-              : colab.nome,
-          emprestimos: colab._count.emprestimos,
-        }),
-      );
-
-      const categoriasData = (data.categoriasMaisEmprestadas as any[]).map(
-        (item: any) => ({
-          name:
-            item.categoria.length > 12
-              ? item.categoria.substring(0, 12) + "..."
-              : item.categoria,
-          total: Number(item.total),
-        }),
-      );
-
-      const stats = data.stats;
-
-      // Variável para controlar a posição Y
-      let currentY = 40;
-
-      // Seção 1 — Estatísticas Gerais
-      doc.setFontSize(14);
-      doc.text("📊 Estatísticas Gerais", 14, currentY);
-      currentY += 10;
-
-      const statsData = [
-        ["Total de Empréstimos", stats[0]],
-        ["Ativos", stats[1]],
-        ["Vencidos", stats[2]],
-        ["Colaboradores Ativos", stats[3]],
-        ["EPIs Cadastradas", stats[4]],
-        ["Estoque Crítico", stats[5]],
+      const dataAtual = new Date().toLocaleDateString('pt-BR');
+      const horaAtual = new Date().toLocaleTimeString('pt-BR');
+      
+      // Título
+      doc.setFontSize(20);
+      doc.text("Relatório do Sistema de EPIs", 20, 20);
+      doc.setFontSize(12);
+      doc.text(`Gerado em: ${dataAtual} às ${horaAtual}`, 20, 30);
+      
+      let yPos = 40;
+      
+      // Estatísticas Gerais
+      doc.setFontSize(16);
+      doc.text("Estatísticas Gerais", 20, yPos);
+      yPos += 10;
+      
+      const estatisticas = [
+        ['Total de EPIs', data.estatisticas.totalEPIs.toString()],
+        ['Total de Empréstimos', data.estatisticas.totalEmprestimos.toString()],
+        ['Colaboradores Ativos', data.estatisticas.colaboradoresAtivos.toString()],
+        ['Empréstimos Ativos', data.estatisticas.emprestimosAtivos.toString()],
+        ['Empréstimos Atrasados', data.estatisticas.emprestimosAtrasados.toString()],
+        ['Empréstimos Concluídos', data.estatisticas.emprestimosConcluidos.toString()],
       ];
-
+      
       autoTable(doc, {
-        startY: currentY,
-        head: [["Indicador", "Valor"]],
-        body: statsData,
-        styles: { fontSize: 10 },
+        startY: yPos,
+        head: [['Métrica', 'Valor']],
+        body: estatisticas,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] },
       });
-
-      // Seção 2 — Empréstimos por Mês
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text("📅 Empréstimos por Mês", 14, currentY);
-      currentY += 5;
-
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Empréstimos por Status
+      doc.setFontSize(16);
+      doc.text("Empréstimos por Status", 20, yPos);
+      yPos += 10;
+      
       autoTable(doc, {
-        startY: currentY,
-        head: [["Mês", "Total"]],
-        body: chartData.map((c) => [formatarMes(c.mes), c.total]),
-        styles: { fontSize: 10 },
+        startY: yPos,
+        head: [['Status', 'Quantidade']],
+        body: data.emprestimosPorStatus.map(item => [item.status, item.quantidade.toString()]),
+        theme: 'grid',
+        headStyles: { fillColor: [34, 197, 94] },
       });
-
-      // Seção 3 — Status dos Empréstimos
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text("📌 Status dos Empréstimos", 14, currentY);
-      currentY += 5;
-
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+      
+      // EPIs por Categoria
+      doc.setFontSize(16);
+      doc.text("EPIs por Categoria", 20, yPos);
+      yPos += 10;
+      
       autoTable(doc, {
-        startY: currentY,
-        head: [["Status", "Quantidade"]],
-        body: pieData.map((s) => [s.name, s.value]),
-        styles: { fontSize: 10 },
+        startY: yPos,
+        head: [['Categoria', 'Quantidade']],
+        body: data.episPorCategoria.map(item => [item.categoria, item.quantidade.toString()]),
+        theme: 'grid',
+        headStyles: { fillColor: [168, 85, 247] },
       });
-
-      // Seção 4 — EPIs Mais Emprestadas
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text("🦺 EPIs Mais Emprestadas", 14, currentY);
-      currentY += 5;
-
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Top Colaboradores
+      doc.setFontSize(16);
+      doc.text("Top 5 Colaboradores com Mais Empréstimos", 20, yPos);
+      yPos += 10;
+      
       autoTable(doc, {
-        startY: currentY,
-        head: [["EPI", "Empréstimos", "Estoque"]],
-        body: epiData.map((e: any) => [e.name, e.emprestimos, e.quantidade]),
-        styles: { fontSize: 10 },
+        startY: yPos,
+        head: [['Colaborador', 'Quantidade de Empréstimos']],
+        body: data.topColaboradores.map(item => [item.nome, item.quantidade.toString()]),
+        theme: 'grid',
+        headStyles: { fillColor: [245, 158, 11] },
       });
-
-      // Seção 5 — Colaboradores Mais Ativos
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text("👷 Colaboradores Mais Ativos", 14, currentY);
-      currentY += 5;
-
-      autoTable(doc, {
-        startY: currentY,
-        head: [["Colaborador", "Empréstimos"]],
-        body: colaboradoresData.map((c: any) => [c.name, c.emprestimos]),
-        styles: { fontSize: 10 },
-      });
-
-      // Seção 6 — Categorias Mais Emprestadas
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      doc.text("🏷️ Categorias Mais Emprestadas", 14, currentY);
-      currentY += 5;
-
-      autoTable(doc, {
-        startY: currentY,
-        head: [["Categoria", "Total"]],
-        body: categoriasData.map((c) => [c.name, c.total]),
-        styles: { fontSize: 10 },
-      });
-
-      // Salvar PDF
-      doc.save("relatorio-epis.pdf");
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
-      alert("Erro ao gerar relatório");
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+      
+      // EPIs com Baixo Estoque
+      if (data.episBaixoEstoque.length > 0) {
+        doc.setFontSize(16);
+        doc.text("EPIs com Baixo Estoque (< 10 unidades)", 20, yPos);
+        yPos += 10;
+        
+        autoTable(doc, {
+          startY: yPos,
+          head: [['EPI', 'Categoria', 'Quantidade Disponível']],
+          body: data.episBaixoEstoque.map(item => [item.nome, item.categoria, item.quantidade.toString()]),
+          theme: 'grid',
+          headStyles: { fillColor: [239, 68, 68] },
+        });
+        
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+      }
+      
+      // Empréstimos Atrasados
+      if (data.emprestimosAtrasadosDetalhes.length > 0) {
+        doc.addPage();
+        doc.setFontSize(16);
+        doc.text("Empréstimos Atrasados", 20, 20);
+        yPos = 30;
+        
+        autoTable(doc, {
+          startY: yPos,
+          head: [['Colaborador', 'EPI', 'Data de Vencimento', 'Dias de Atraso']],
+          body: data.emprestimosAtrasadosDetalhes.map(item => [
+            item.colaborador,
+            item.epi,
+            formatarData(item.dataVencimento),
+            item.diasAtraso.toString()
+          ]),
+          theme: 'grid',
+          headStyles: { fillColor: [239, 68, 68] },
+        });
+      }
+      
+      doc.save(`relatorio-epis-${dataAtual.replace(/\//g, '-')}.pdf`);
+    } catch (err) {
+      console.error("Erro ao exportar PDF:", err);
+      alert("Erro ao gerar PDF. Tente novamente.");
     } finally {
       setExporting(false);
     }
@@ -319,62 +329,6 @@ export default function RelatoriosPage() {
     );
   }
 
-  // Formatar dados para os gráficos
-  const chartData = (data.emprestimosPorMes as any[]).map((item: any) => ({
-    mes: item.mes,
-    total: Number(item.total),
-  }));
-
-  const pieData = (data.statusEmprestimos as any[]).map((item: any) => ({
-    name:
-      item.status === "ATIVO"
-        ? "Ativos"
-        : item.status === "DEVOLVIDO"
-          ? "Devolvidos"
-          : "Vencidos",
-    value: item._count._all,
-  }));
-
-  const epiData = data.episMaisEmprestados.map((epi: any) => ({
-    name: epi.nome.length > 15 ? epi.nome.substring(0, 15) + "..." : epi.nome,
-    emprestimos: epi._count.emprestimos,
-    quantidade: epi.quantidade,
-  }));
-
-  const colaboradoresData = data.colaboradoresMaisAtivos.map((colab: any) => ({
-    name:
-      colab.nome.length > 15 ? colab.nome.substring(0, 15) + "..." : colab.nome,
-    emprestimos: colab._count.emprestimos,
-  }));
-
-  const vencidosData = (data.emprestimosVencidosPorMes as any[]).map(
-    (item: any) => ({
-      mes: item.mes,
-      total: Number(item.total),
-    }),
-  );
-
-  const categoriasData = (data.categoriasMaisEmprestadas as any[]).map(
-    (item: any) => ({
-      name:
-        item.categoria.length > 12
-          ? item.categoria.substring(0, 12) + "..."
-          : item.categoria,
-      total: Number(item.total),
-    }),
-  );
-
-  const stats = data.stats;
-
-  const COLORS = [
-    "#0088FE",
-    "#00C49F",
-    "#FFBB28",
-    "#FF8042",
-    "#8884D8",
-    "#82CA9D",
-  ];
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -393,349 +347,351 @@ export default function RelatoriosPage() {
         </Button>
       </div>
 
-      {/* Estatísticas Gerais */}
+      {/* Cards de Estatísticas */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total de Empréstimos
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Total de EPIs</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats[0]}</div>
-            <p className="text-muted-foreground text-xs">
-              Desde o início do sistema
+            <div className="text-2xl font-bold">{data.estatisticas.totalEPIs}</div>
+            <p className="text-xs text-muted-foreground">
+              Itens disponíveis no estoque
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Empréstimos Ativos
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Empréstimos</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats[1]}</div>
-            <p className="text-muted-foreground text-xs">{stats[2]} vencidos</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Colaboradores Ativos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats[3]}</div>
-            <p className="text-muted-foreground text-xs">No sistema</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              EPIs Cadastradas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats[4]}</div>
-            <p className="text-muted-foreground text-xs">
-              {stats[5]} com estoque crítico
+            <div className="text-2xl font-bold">{data.estatisticas.totalEmprestimos}</div>
+            <p className="text-xs text-muted-foreground">
+              Empréstimos realizados
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Taxa de Devolução
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Colaboradores Ativos</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {stats[0] > 0
-                ? Math.round(
-                    ((pieData.find((d) => d.name === "Devolvidos")?.value ||
-                      0) /
-                      stats[0]) *
-                      100,
-                  )
-                : 0}
-              %
-            </div>
-            <p className="text-muted-foreground text-xs">
-              Empréstimos devolvidos
+            <div className="text-2xl font-bold">{data.estatisticas.colaboradoresAtivos}</div>
+            <p className="text-xs text-muted-foreground">
+              Colaboradores no sistema
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Média Mensal</CardTitle>
+            <CardTitle className="text-sm font-medium">Empréstimos Ativos</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {chartData.length > 0
-                ? Math.round(
-                    chartData.reduce((acc, curr) => acc + curr.total, 0) /
-                      chartData.length,
-                  )
-                : 0}
-            </div>
-            <p className="text-muted-foreground text-xs">Empréstimos por mês</p>
+            <div className="text-2xl font-bold">{data.estatisticas.emprestimosAtivos}</div>
+            <p className="text-xs text-muted-foreground">
+              Empréstimos em andamento
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Empréstimos Atrasados</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 6v6l4 2" />
+            </svg>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{data.estatisticas.emprestimosAtrasados}</div>
+            <p className="text-xs text-muted-foreground">
+              Empréstimos fora do prazo
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Empréstimos Concluídos</CardTitle>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              className="h-4 w-4 text-muted-foreground"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data.estatisticas.emprestimosConcluidos}</div>
+            <p className="text-xs text-muted-foreground">
+              Empréstimos finalizados
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Gráficos */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Empréstimos por Mês */}
-        <Card className="lg:col-span-2">
+        {/* Gráfico de Pizza - Empréstimos por Status */}
+        {/* Gráfico de Pizza - Empréstimos por Status */}
+<Card>
+  <CardHeader>
+    <CardTitle>Empréstimos por Status</CardTitle>
+    <CardDescription>
+      Distribuição dos empréstimos por situação
+    </CardDescription>
+  </CardHeader>
+  <CardContent>
+    <ResponsiveContainer width="100%" height={300}>
+      <PieChart>
+        <Pie
+          data={data.emprestimosPorStatus}
+          cx="50%"
+          cy="50%"
+          labelLine={false}
+          label={(props) => {
+            const { status } = props.payload; // Acessa status do payload
+            const percent = props.percent || 0; // Valor padrão se for undefined
+            return `${status}: ${(percent * 100).toFixed(0)}%`;
+          }}
+          outerRadius={80}
+          fill="#8884d8"
+          dataKey="quantidade"
+        >
+          {data.emprestimosPorStatus.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip 
+          formatter={(value) => [value, 'Quantidade']}
+          labelFormatter={(label, payload) => {
+            // payload[0] contém os dados do item
+            return payload[0]?.payload?.status || label;
+          }}
+        />
+      </PieChart>
+    </ResponsiveContainer>
+  </CardContent>
+</Card>
+
+        {/* Gráfico de Barras - Empréstimos por Mês */}
+        <Card>
           <CardHeader>
             <CardTitle>Empréstimos por Mês</CardTitle>
-            <CardDescription>Últimos 6 meses</CardDescription>
+            <CardDescription>
+              Quantidade de empréstimos realizados por mês
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
+              <BarChart data={data.emprestimosPorMes}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="mes"
-                  tickFormatter={(value) => {
-                    const [year, month] = value.split("-");
-                    return `${month}/${year.slice(2)}`;
-                  }}
-                />
+                <XAxis dataKey="mes" />
                 <YAxis />
-                <Tooltip
-                  formatter={(value) => [`${value} empréstimos`, "Total"]}
-                  labelFormatter={(label) => {
-                    const [year, month] = label.split("-");
-                    return `Mês: ${month}/${year}`;
-                  }}
-                />
-                <Bar dataKey="total" fill="#8884d8" name="Empréstimos" />
+                <Tooltip />
+                <Bar dataKey="quantidade" fill="#8884d8" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Status dos Empréstimos */}
+        {/* Gráfico de Linhas - EPIs por Categoria */}
         <Card>
           <CardHeader>
-            <CardTitle>Status dos Empréstimos</CardTitle>
+            <CardTitle>EPIs por Categoria</CardTitle>
+            <CardDescription>
+              Distribuição de EPIs por categoria
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(props) => {
-                    const { percent } = props as { percent?: number };
-                    return percent ? `${(percent * 100).toFixed(0)}%` : "";
-                  }}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => [`${value} empréstimos`, "Quantidade"]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Empréstimos Vencidos */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Empréstimos Vencidos</CardTitle>
-            <CardDescription>Últimos 6 meses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={vencidosData}>
+              <LineChart data={data.episPorCategoria}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="mes"
-                  tickFormatter={(value) => {
-                    const [year, month] = value.split("-");
-                    return `${month}/${year.slice(2)}`;
-                  }}
-                />
+                <XAxis dataKey="categoria" />
                 <YAxis />
-                <Tooltip
-                  formatter={(value) => [`${value} vencidos`, "Total"]}
-                  labelFormatter={(label) => {
-                    const [year, month] = label.split("-");
-                    return `Mês: ${month}/${year}`;
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#ff7300"
-                  name="Vencidos"
-                  strokeWidth={2}
-                />
+                <Tooltip />
+                <Line type="monotone" dataKey="quantidade" stroke="#82ca9d" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* EPIs Mais Emprestados */}
+        {/* Gráfico de Barras - Top Colaboradores */}
         <Card>
           <CardHeader>
-            <CardTitle>EPIs Mais Emprestados</CardTitle>
-            <CardDescription>Top 8 EPIs</CardDescription>
+            <CardTitle>Top 5 Colaboradores</CardTitle>
+            <CardDescription>
+              Colaboradores com mais empréstimos
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={epiData} layout="vertical" margin={{ left: 100 }}>
+              <BarChart data={data.topColaboradores}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="name" width={80} />
-                <Tooltip
-                  formatter={(value, name) => {
-                    if (name === "emprestimos")
-                      return [`${value} empréstimos`, "Total"];
-                    return [`${value} unidades`, "Estoque"];
-                  }}
-                />
-                <Bar dataKey="emprestimos" fill="#8884d8" name="Empréstimos" />
-                <Bar dataKey="quantidade" fill="#82ca9d" name="Estoque" />
+                <XAxis dataKey="nome" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="quantidade" fill="#ffc658" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Colaboradores Mais Ativos */}
-        <Card>
+        {/* Tabela de EPIs com Baixo Estoque */}
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Colaboradores Mais Ativos</CardTitle>
-            <CardDescription>Top 8 colaboradores</CardDescription>
+            <CardTitle>EPIs com Baixo Estoque</CardTitle>
+            <CardDescription>
+              EPIs com menos de 10 unidades disponíveis
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={colaboradoresData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="emprestimos" />
-                <YAxis dataKey="name" type="category" width={80} />
-                <Tooltip
-                  formatter={(value) => [`${value} empréstimos`, "Total"]}
-                />
-                <Bar dataKey="emprestimos" fill="#0088FE" name="Empréstimos" />
-              </BarChart>
-            </ResponsiveContainer>
+            {data.episBaixoEstoque.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-3 px-4">EPI</th>
+                      <th className="text-left py-3 px-4">Categoria</th>
+                      <th className="text-left py-3 px-4">Quantidade</th>
+                      <th className="text-left py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.episBaixoEstoque.map((epi, index) => (
+                      <tr key={index} className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-4">{epi.nome}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant="outline">{epi.categoria}</Badge>
+                        </td>
+                        <td className="py-3 px-4">{epi.quantidade}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant={epi.quantidade < 5 ? "default" : "destructive"}>
+                            {epi.quantidade < 5 ? "Crítico" : "Baixo"}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                Todos os EPIs estão com estoque adequado
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Categorias Mais Emprestadas */}
-        <Card>
+        {/* Tabela de Empréstimos Atrasados */}
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Categorias Mais Emprestadas</CardTitle>
-            <CardDescription>Top 6 categorias</CardDescription>
+            <CardTitle>Empréstimos Atrasados</CardTitle>
+            <CardDescription>
+              Empréstimos com data de vencimento expirada
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={categoriasData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(props) => {
-                    const { percent } = props as { percent?: number };
-                    return percent ? `${(percent * 100).toFixed(0)}%` : "";
-                  }}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="total"
-                >
-                  {categoriasData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value) => [`${value} empréstimos`, "Total"]}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-4 space-y-2">
-              {categoriasData.map((categoria, index) => (
-                <div
-                  key={categoria.name}
-                  className="flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2">
-                    <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    />
-                    <span className="text-sm">{categoria.name}</span>
-                  </div>
-                  <Badge variant="outline">{categoria.total}</Badge>
-                </div>
-              ))}
-            </div>
+            {data.emprestimosAtrasadosDetalhes.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-3 px-4">Colaborador</th>
+                      <th className="text-left py-3 px-4">EPI</th>
+                      <th className="text-left py-3 px-4">Data de Vencimento</th>
+                      <th className="text-left py-3 px-4">Dias de Atraso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.emprestimosAtrasadosDetalhes.map((item, index) => (
+                      <tr key={index} className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-4">{item.colaborador}</td>
+                        <td className="py-3 px-4">{item.epi}</td>
+                        <td className="py-3 px-4">{formatarData(item.dataVencimento)}</td>
+                        <td className="py-3 px-4">
+                          <Badge variant="destructive">{item.diasAtraso} dias</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum empréstimo atrasado
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      {/* Resumo Executivo */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Resumo Executivo</CardTitle>
-          <CardDescription>
-            Visão geral do desempenho do sistema
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <h4 className="font-semibold">Desempenho Mensal</h4>
-              <p className="text-muted-foreground text-sm">
-                {chartData.length > 0
-                  ? `Média de ${Math.round(chartData.reduce((acc, curr) => acc + curr.total, 0) / chartData.length)} empréstimos/mês`
-                  : "Sem dados suficientes"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold">Taxa de Vencimento</h4>
-              <p className="text-muted-foreground text-sm">
-                {stats[1] > 0
-                  ? `${Math.round((stats[2] / stats[1]) * 100)}% dos empréstimos ativos estão vencidos`
-                  : "Nenhum empréstimo ativo"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold">EPI Mais Popular</h4>
-              <p className="text-muted-foreground text-sm">
-                {epiData.length > 0
-                  ? `${epiData[0].name} (${epiData[0].emprestimos} empréstimos)`
-                  : "Sem dados"}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold">Colaborador Mais Ativo</h4>
-              <p className="text-muted-foreground text-sm">
-                {colaboradoresData.length > 0
-                  ? `${colaboradoresData[0].name} (${colaboradoresData[0].emprestimos} empréstimos)`
-                  : "Sem dados"}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
