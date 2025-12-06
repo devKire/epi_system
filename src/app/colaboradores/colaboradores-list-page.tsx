@@ -1,3 +1,4 @@
+// app/colaboradores/colaboradores-list-page.tsx
 import { Edit, Plus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,7 +14,9 @@ import {
 } from "@/components/ui/card";
 import { db } from "@/lib/prisma";
 
+import { SearchClient } from "../components/search-client";
 import DeleteColaboradorButton from "./delete-colaborador-button";
+
 
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -48,7 +51,7 @@ export default async function ColaboradoresListPage(props: PageProps) {
       _count: {
         select: {
           emprestimos: {
-            where: { status: "EMPRESTADO"},
+            where: { status: "EMPRESTADO" },
           },
         },
       },
@@ -74,17 +77,22 @@ export default async function ColaboradoresListPage(props: PageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Colaboradores</CardTitle>
-          <CardDescription>
-            {colaboradores.length} colaborador(es) encontrado(s)
-          </CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Lista de Colaboradores</CardTitle>
+              <CardDescription>
+                {colaboradores.length} colaborador(es) encontrado(s)
+              </CardDescription>
+            </div>
+            <SearchClient />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {colaboradores.map((colaborador) => (
+            {colaboradores.map((colaborador : any) => (
               <div
                 key={colaborador.id}
-                className="flex items-center justify-between rounded-lg border p-4"
+                className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center space-x-4">
                   <div className="bg-primary/10 justify-centershadow-smborder border-primary/5 flex items-center rounded-full p-1">
@@ -101,7 +109,7 @@ export default async function ColaboradoresListPage(props: PageProps) {
                     <p className="text-muted-foreground text-sm">
                       {colaborador.email} • {colaborador.matricula}
                     </p>
-                    <div className="mt-1 flex items-center space-x-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <Badge
                         variant={colaborador.ativo ? "default" : "secondary"}
                       >
@@ -113,7 +121,7 @@ export default async function ColaboradoresListPage(props: PageProps) {
                     </div>
                   </div>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex justify-end space-x-2">
                   <Button variant="outline" size="sm" asChild>
                     <Link href={`/colaboradores/${colaborador.id}`}>
                       <Edit className="h-4 w-4" />
@@ -123,6 +131,17 @@ export default async function ColaboradoresListPage(props: PageProps) {
                 </div>
               </div>
             ))}
+            
+            {/* Mensagem quando não há resultados */}
+            {colaboradores.length === 0 && (
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <p className="text-muted-foreground">
+                  {search
+                    ? `Nenhum colaborador encontrado para "${search}"`
+                    : "Nenhum colaborador cadastrado"}
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -5,11 +5,17 @@ import { Navbar } from "../components/navbar";
 import EmprestimosListPage from "./emprestimos-list-page";
 
 
-export default function ColaboradoresPage() {
+interface PageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export default async function EmprestimosPage(props: PageProps) {
+   const searchParams = await props.searchParams;
   return (
     <AuthGuard requiredRole="ADMIN">
       <Navbar />
-      <EmprestimosListPage searchParams={Promise.resolve({})} />
+      <EmprestimosListPage searchParams={Promise.resolve(searchParams)}/>
     </AuthGuard>
   );
 }
+

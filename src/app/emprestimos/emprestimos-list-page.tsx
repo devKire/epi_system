@@ -1,5 +1,4 @@
-// epi_system\src\app\emprestimos\emprestimos-list-page.tsx
-import { Calendar, Edit, Filter,Package, Plus, RotateCcw, UserCheck } from "lucide-react";
+import { Calendar, Edit, Filter, Package, Plus, RotateCcw, Search, UserCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +18,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { db } from "@/lib/prisma";
 
+import { SearchClient } from "../components/search-client";
+
 interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function EmprestimosPage(props: PageProps) {
   const searchParams = await props.searchParams;
+  const search = searchParams.search as string;
   const status = searchParams.status as string;
   const filterType = searchParams.filter as string;
 
@@ -58,10 +60,21 @@ export default async function EmprestimosPage(props: PageProps) {
     whereClause.dataDevolucao = null;
   }
 
+  // Adicionar condição de busca se houver
+  if (search) {
+    whereClause.OR = [
+      { colaborador: { nome: { contains: search, mode: "insensitive" } } },
+      { colaborador: { matricula: { contains: search, mode: "insensitive" } } },
+      { colaborador: { email: { contains: search, mode: "insensitive" } } },
+      { epi: { nome: { contains: search, mode: "insensitive" } } },
+      { epi: { categoria: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
   const emprestimos = await db.emprestimo.findMany({
     where: whereClause,
     include: {
-      colaborador: { select: { nome: true, matricula: true } },
+      colaborador: { select: { nome: true, matricula: true, email: true } },
       epi: { select: { nome: true, categoria: true } },
     },
     orderBy: { dataEmprestimo: "desc" },
@@ -85,38 +98,50 @@ export default async function EmprestimosPage(props: PageProps) {
     PERDIDO: "Perdido",
   };
 
-  // Buscar estatísticas
-  const [totalAtivos, totalVencidos, totalDevolvidos, totalEmprestados, totalEmUso, totalFornecidos] = await Promise.all([
-    db.emprestimo.count({
-      where: { status: { in: ["EMPRESTADO", "EM_USO", "FORNECIDO"] } },
-    }),
-    db.emprestimo.count({
-      where: {
-        status: { in: ["EMPRESTADO", "EM_USO"] },
-        dataVencimento: { lt: new Date() },
-      },
-    }),
-    db.emprestimo.count({
-      where: { status: { in: ["DEVOLVIDO", "DANIFICADO", "PERDIDO"] } },
-    }),
-    db.emprestimo.count({
-      where: { status: "EMPRESTADO" },
-    }),
-    db.emprestimo.count({
-      where: { status: "EM_USO" },
-    }),
-    db.emprestimo.count({
-      where: { status: "FORNECIDO" },
-    }),
-  ]);
-
-  // Calcular quantos empréstimos estão aptos para devolução
-  const emprestimosAptosDevolucao = await db.emprestimo.count({
-    where: {
-      status: { in: ["EMPRESTADO", "EM_USO"] },
-      dataDevolucao: null,
+  // Buscar estatísticas - use strings com type assertion
+const [totalAtivos, totalVencidos, totalDevolvidos, totalEmprestados, totalEmUso, totalFornecidos] = await Promise.all([
+  db.emprestimo.count({
+    where: { 
+      status: { 
+        in: ["EMPRESTADO", "EM_USO", "FORNECIDO"] as any 
+      } 
     },
-  });
+  }),
+  db.emprestimo.count({
+    where: {
+      status: { 
+        in: ["EMPRESTADO", "EM_USO"] as any 
+      },
+      dataVencimento: { lt: new Date() },
+    },
+  }),
+  db.emprestimo.count({
+    where: { 
+      status: { 
+        in: ["DEVOLVIDO", "DANIFICADO", "PERDIDO"] as any 
+      } 
+    },
+  }),
+  db.emprestimo.count({
+    where: { status: "EMPRESTADO" as any },
+  }),
+  db.emprestimo.count({
+    where: { status: "EM_USO" as any },
+  }),
+  db.emprestimo.count({
+    where: { status: "FORNECIDO" as any },
+  }),
+]);
+
+// Calcular quantos empréstimos estão aptos para devolução
+const emprestimosAptosDevolucao = await db.emprestimo.count({
+  where: {
+    status: { 
+      in: ["EMPRESTADO", "EM_USO"] as any 
+    },
+    dataDevolucao: null,
+  },
+});
 
   return (
     <div className="space-y-6 p-6">
@@ -219,11 +244,11 @@ export default async function EmprestimosPage(props: PageProps) {
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros e Busca */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">Filtros</h3>
-          {status && (
+          <h3 className="text-sm font-medium">Filtros e Busca</h3>
+          {(status || filterType || search) && (
             <Button variant="ghost" size="sm" asChild>
               <Link href="/emprestimos">
                 Limpar filtros
@@ -232,6 +257,11 @@ export default async function EmprestimosPage(props: PageProps) {
           )}
         </div>
         
+        {/* Componente de busca */}
+        <div className="mb-4">
+          <SearchClient />
+        </div>
+
         <div className="flex flex-wrap gap-2">
           <Button
             variant={!status ? "default" : "outline"}
@@ -294,6 +324,7 @@ export default async function EmprestimosPage(props: PageProps) {
                 <Link 
                   href={`/emprestimos?${new URLSearchParams({
                     ...(status && { status }),
+                    ...(search && { search }),
                     filter: "com_devolucao"
                   }).toString()}`} 
                   className="cursor-pointer"
@@ -305,6 +336,7 @@ export default async function EmprestimosPage(props: PageProps) {
                 <Link 
                   href={`/emprestimos?${new URLSearchParams({
                     ...(status && { status }),
+                    ...(search && { search }),
                     filter: "sem_devolucao"
                   }).toString()}`} 
                   className="cursor-pointer"
@@ -338,54 +370,62 @@ export default async function EmprestimosPage(props: PageProps) {
           </Button>
         </div>
 
-        {/* Status ativo do filtro */}
-        {status && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Filtro ativo:</span>
-            <Badge variant="secondary">
-              {status === "ativos" && "Ativos"}
-              {status === "vencido" && "Vencidos"}
-              {status === "devolvidos" && "Finalizados"}
-              {status === "emprestados" && "Emprestados"}
-              {status === "em_uso" && "Em Uso"}
-              {status === "fornecidos" && "Fornecidos"}
-              {status === "danificados" && "Danificados"}
-              {status === "perdidos" && "Perdidos"}
-            </Badge>
+        {/* Status ativo do filtro e busca */}
+        {(status || filterType || search) && (
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>Filtros ativos:</span>
+            {search && (
+              <Badge variant="secondary">
+                <Search className="mr-1 h-3 w-3" />
+                Busca: "{search}"
+              </Badge>
+            )}
+            {status && (
+              <Badge variant="secondary">
+                {status === "ativos" && "Ativos"}
+                {status === "vencido" && "Vencidos"}
+                {status === "devolvidos" && "Finalizados"}
+                {status === "emprestados" && "Emprestados"}
+                {status === "em_uso" && "Em Uso"}
+                {status === "fornecidos" && "Fornecidos"}
+                {status === "danificados" && "Danificados"}
+                {status === "perdidos" && "Perdidos"}
+              </Badge>
+            )}
             {filterType && (
-              <>
-                <span>•</span>
-                <Badge variant="outline">
-                  {filterType === "com_devolucao" && "Com devolução"}
-                  {filterType === "sem_devolucao" && "Sem devolução"}
-                </Badge>
-              </>
+              <Badge variant="outline">
+                {filterType === "com_devolucao" && "Com devolução"}
+                {filterType === "sem_devolucao" && "Sem devolução"}
+              </Badge>
             )}
           </div>
         )}
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Histórico de Empréstimos</CardTitle>
-            <CardDescription>
-              {emprestimos.length} empréstimo(s) encontrado(s)
-            </CardDescription>
+        <CardHeader>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Histórico de Empréstimos</CardTitle>
+              <CardDescription>
+                {emprestimos.length} empréstimo(s) encontrado(s)
+                {search && ` para "${search}"`}
+              </CardDescription>
+            </div>
+            {emprestimos.length > 0 && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/emprestimos/devolucao">
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Registrar Devolução
+                </Link>
+              </Button>
+            )}
           </div>
-          {emprestimos.length > 0 && (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/emprestimos/devolucao">
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Registrar Devolução
-              </Link>
-            </Button>
-          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {(
-              emprestimos.map((emprestimo) => {
+            {emprestimos.length > 0 ? (
+              emprestimos.map((emprestimo : any) => {
                 const isVencido =
                   ["EMPRESTADO", "EM_USO"].includes(emprestimo.status) &&
                   new Date(emprestimo.dataVencimento) < new Date();
@@ -413,6 +453,7 @@ export default async function EmprestimosPage(props: PageProps) {
                             </h3>
                             <p className="text-muted-foreground text-sm">
                               {emprestimo.epi.nome} • {emprestimo.quantidade}x • Matrícula: {emprestimo.colaborador.matricula}
+                              {emprestimo.colaborador.email && ` • ${emprestimo.colaborador.email}`}
                             </p>
                           </div>
                           <div className="flex space-x-2">
@@ -468,6 +509,18 @@ export default async function EmprestimosPage(props: PageProps) {
                   </div>
                 );
               })
+            ) : (
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Nenhum empréstimo encontrado</h3>
+                <p className="text-muted-foreground">
+                  {search
+                    ? `Nenhum resultado para "${search}"`
+                    : status || filterType
+                    ? `Nenhum empréstimo com os filtros aplicados`
+                    : "Comece criando um novo empréstimo."}
+                </p>
+              </div>
             )}
           </div>
         </CardContent>
