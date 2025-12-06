@@ -45,16 +45,18 @@ model EPI {
 }
 
 model Emprestimo {
-  id           String   @id @default(cuid())
-  colaborador  Colaborador @relation(fields: [colaboradorId], references: [id])
-  colaboradorId String
-  epi          EPI      @relation(fields: [epiId], references: [id])
-  epiId        String
-  quantidade   Int
-  dataEmprestimo DateTime @default(now())
-  dataDevolucao DateTime?
+  id             String          @id @default(cuid())
+  colaborador    Colaborador     @relation(fields: [colaboradorId], references: [id])
+  colaboradorId  String
+  epi            EPI             @relation(fields: [epiId], references: [id])
+  epiId          String
+  quantidade     Int
+  dataEmprestimo DateTime        @default(now())
+  dataDevolucao  DateTime?
   dataVencimento DateTime
-  status       EmprestimoStatus @default(ATIVO)
+  status         EmprestimoStatus @default(EMPRESTADO)
+  observacao     String?
+  observacaoDevolucao String?
   
   @@map("emprestimos")
 }
@@ -65,7 +67,10 @@ enum Role {
 }
 
 enum EmprestimoStatus {
-  ATIVO
+  EMPRESTADO
+  EM_USO
+  FORNECIDO
   DEVOLVIDO
-  VENCIDO
+  DANIFICADO
+  PERDIDO
 }

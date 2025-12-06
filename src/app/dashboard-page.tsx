@@ -36,10 +36,10 @@ const DashboardPage = async () => {
     db.colaborador.count(),
     db.colaborador.count({ where: { ativo: true } }),
     db.ePI.count(),
-    db.emprestimo.count({ where: { status: "ATIVO" } }),
+    db.emprestimo.count({ where: { status: "EMPRESTADO" } }),
     db.emprestimo.count({
       where: {
-        status: "ATIVO",
+        status: "EMPRESTADO",
         dataVencimento: { lt: new Date() },
       },
     }),
@@ -50,7 +50,7 @@ const DashboardPage = async () => {
   // Buscar últimos empréstimos
   const ultimosEmprestimos = await db.emprestimo.findMany({
     take: 5,
-    where: { status: "ATIVO" },
+    where: { status: "EMPRESTADO" },
     include: {
       colaborador: { select: { nome: true, matricula: true } },
       epi: { select: { nome: true, categoria: true } },
@@ -69,7 +69,7 @@ const DashboardPage = async () => {
   const emprestimosProximosVencimento = await db.emprestimo.findMany({
     take: 5,
     where: {
-      status: "ATIVO",
+      status: "EMPRESTADO",
       dataVencimento: {
         gte: new Date(),
         lte: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 dias

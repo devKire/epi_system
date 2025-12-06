@@ -48,7 +48,7 @@ export default async function ColaboradoresListPage(props: PageProps) {
       _count: {
         select: {
           emprestimos: {
-            where: { status: "ATIVO" },
+            where: { status: "EMPRESTADO"},
           },
         },
       },

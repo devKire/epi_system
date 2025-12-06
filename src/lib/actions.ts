@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
 import bcrypt from "bcryptjs";
@@ -37,6 +38,9 @@ export type EmprestimoActionState = {
     epiId?: string[];
     quantidade?: string[];
     dataVencimento?: string[];
+    status?: string[];
+    dataDevolucao?: string[];
+    observacaoDevolucao?: string[];
   };
 };
 
@@ -46,6 +50,8 @@ export type DevolucaoActionState = {
   errors?: {
     emprestimoId?: string[];
     quantidadeDevolvida?: string[];
+    status?: string[];
+    dataDevolucao?: string[];
   };
 };
 
@@ -254,7 +260,7 @@ export async function deleteColaborador(id: string): Promise<ActionState> {
     const emprestimosAtivos = await db.emprestimo.count({
       where: {
         colaboradorId: id,
-        status: "ATIVO",
+        status: "EMPRESTADO",
       },
     });
 
@@ -450,7 +456,7 @@ export async function deleteEPI(id: string): Promise<EPIActionState> {
     const emprestimosAtivos = await db.emprestimo.count({
       where: {
         epiId: id,
-        status: "ATIVO",
+        status: "EMPRESTADO",
       },
     });
 
@@ -482,6 +488,8 @@ export async function createEmprestimo(
   const epiId = formData.get("epiId") as string;
   const quantidade = formData.get("quantidade") as string;
   const dataVencimento = formData.get("dataVencimento") as string;
+  const status = (formData.get("status") as string) || "EMPRESTADO";
+  const observacao = formData.get("observacao") as string;
 
   const errors: EmprestimoActionState["errors"] = {};
 
@@ -511,6 +519,12 @@ export async function createEmprestimo(
     } else if (dataVenc <= new Date()) {
       errors.dataVencimento = ["Data de vencimento deve ser futura"];
     }
+  }
+
+  // Validar status
+  const statusPermitidos = ["EMPRESTADO", "EM_USO", "FORNECIDO"];
+  if (status && !statusPermitidos.includes(status)) {
+    errors.status = ["Status inválido para novo empréstimo"];
   }
 
   if (Object.keys(errors).length > 0) {
@@ -550,17 +564,21 @@ export async function createEmprestimo(
     }
 
     const quantidadeSolicitada = parseInt(quantidade);
-    if (epi.quantidade < quantidadeSolicitada) {
-      return {
-        errors: {
-          quantidade: [`Estoque insuficiente. Disponível: ${epi.quantidade}`],
-        },
-        message: "Estoque insuficiente",
-      };
+    
+    // Só verifica estoque se não for status FORNECIDO
+    if (status !== "FORNECIDO") {
+      if (epi.quantidade < quantidadeSolicitada) {
+        return {
+          errors: {
+            quantidade: [`Estoque insuficiente. Disponível: ${epi.quantidade}`],
+          },
+          message: "Estoque insuficiente",
+        };
+      }
     }
 
-    // Verificar validade da EPI
-    if (epi.validade && new Date(epi.validade) < new Date()) {
+    // Verificar validade da EPI (exceto para FORNECIDO)
+    if (epi.validade && new Date(epi.validade) < new Date() && status !== "FORNECIDO") {
       return {
         errors: { epiId: ["EPI está vencida"] },
         message: "EPI vencida",
@@ -569,11 +587,13 @@ export async function createEmprestimo(
 
     // Criar empréstimo e atualizar estoque em uma transação
     const result = await db.$transaction(async (tx) => {
-      // Atualizar estoque da EPI
-      await tx.ePI.update({
-        where: { id: epiId },
-        data: { quantidade: { decrement: quantidadeSolicitada } },
-      });
+      // Se não for FORNECIDO, atualizar estoque da EPI
+      if (status !== "FORNECIDO") {
+        await tx.ePI.update({
+          where: { id: epiId },
+          data: { quantidade: { decrement: quantidadeSolicitada } },
+        });
+      }
 
       // Criar empréstimo
       const emprestimo = await tx.emprestimo.create({
@@ -582,6 +602,10 @@ export async function createEmprestimo(
           epiId,
           quantidade: quantidadeSolicitada,
           dataVencimento: new Date(dataVencimento),
+          status: status as any,
+          observacao,
+          // Se for FORNECIDO, já define data de devolução como nula permanente
+          dataDevolucao: status === "FORNECIDO" ? null : undefined,
         },
       });
 
@@ -598,15 +622,121 @@ export async function createEmprestimo(
   }
 }
 
+export async function updateEmprestimo(
+  id: string,
+  prevState: EmprestimoActionState,
+  formData: FormData,
+): Promise<EmprestimoActionState> {
+  const status = formData.get("status") as string;
+  const dataDevolucao = formData.get("dataDevolucao") as string;
+  const observacaoDevolucao = formData.get("observacaoDevolucao") as string;
+  const observacao = formData.get("observacao") as string;
+
+  const errors: EmprestimoActionState["errors"] = {};
+
+  if (!status) {
+    errors.status = ["Status é obrigatório"];
+  }
+
+  // Validar datas quando status for de devolução
+  const statusDevolucao = ["DEVOLVIDO", "DANIFICADO", "PERDIDO"];
+  if (statusDevolucao.includes(status)) {
+    if (!dataDevolucao) {
+      errors.dataDevolucao = ["Data de devolução é obrigatória para este status"];
+    } else {
+      const dataDev = new Date(dataDevolucao);
+      if (isNaN(dataDev.getTime())) {
+        errors.dataDevolucao = ["Data de devolução inválida"];
+      }
+    }
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors, message: "Por favor, corrija os erros abaixo" };
+  }
+
+  try {
+    // Buscar empréstimo atual
+    const emprestimo = await db.emprestimo.findUnique({
+      where: { id },
+      include: { epi: true },
+    });
+
+    if (!emprestimo) {
+      return {
+        errors: { status: ["Empréstimo não encontrado"] },
+        message: "Empréstimo inválido",
+      };
+    }
+
+    const dataUpdate: any = {
+      status: status as any,
+      observacao,
+    };
+
+    // Se for status de devolução, atualizar dataDevolucao e observacaoDevolucao
+    if (statusDevolucao.includes(status)) {
+      dataUpdate.dataDevolucao = new Date(dataDevolucao);
+      dataUpdate.observacaoDevolucao = observacaoDevolucao;
+      
+      // Se não for FORNECIDO e está sendo devolvido, restaurar estoque
+      if (emprestimo.status !== "FORNECIDO" && 
+          !["DEVOLVIDO", "DANIFICADO", "PERDIDO"].includes(emprestimo.status)) {
+        await db.ePI.update({
+          where: { id: emprestimo.epiId },
+          data: { quantidade: { increment: emprestimo.quantidade } },
+        });
+      }
+    }
+
+    await db.emprestimo.update({
+      where: { id },
+      data: dataUpdate,
+    });
+
+    revalidatePath("/emprestimos");
+    revalidatePath(`/emprestimos/${id}`);
+    return { success: true, message: "Empréstimo atualizado com sucesso!" };
+  } catch (error) {
+    console.error("Erro ao atualizar empréstimo:", error);
+    return {
+      message: "Erro interno do servidor. Tente novamente.",
+    };
+  }
+}
+
+export async function getEmprestimoById(id: string) {
+  try {
+    const emprestimo = await db.emprestimo.findUnique({
+      where: { id },
+      include: {
+        colaborador: { select: { nome: true, matricula: true } },
+        epi: { select: { nome: true, categoria: true, validade: true } },
+      },
+    });
+    
+    return emprestimo;
+  } catch (error) {
+    console.error("Erro ao buscar empréstimo:", error);
+    return null;
+  }
+}
+
+// No seu arquivo de server actions (lib/actions.ts)
 export async function registrarDevolucao(
   prevState: DevolucaoActionState,
   formData: FormData,
 ): Promise<DevolucaoActionState> {
   const emprestimoId = formData.get("emprestimoId") as string;
   const quantidadeDevolvida = formData.get("quantidadeDevolvida") as string;
+  const status = formData.get("status") as string;
+  const dataDevolucao = formData.get("dataDevolucao") as string;
+  const observacaoDevolucao = formData.get("observacaoDevolucao") as string;
+  const observacao = formData.get("observacao") as string;
 
   const errors: DevolucaoActionState["errors"] = {};
 
+  // Validações
   if (!emprestimoId) {
     errors.emprestimoId = ["ID do empréstimo é obrigatório"];
   }
@@ -617,6 +747,27 @@ export async function registrarDevolucao(
     const quant = parseInt(quantidadeDevolvida);
     if (isNaN(quant) || quant <= 0) {
       errors.quantidadeDevolvida = ["Quantidade deve ser maior que zero"];
+    }
+  }
+
+  if (!status) {
+    errors.status = ["Status é obrigatório"];
+  } else if (!["DEVOLVIDO", "DANIFICADO", "PERDIDO"].includes(status)) {
+    errors.status = ["Status de devolução inválido"];
+  }
+
+  // Validar data de devolução para status de devolução
+  const statusDevolucao = ["DEVOLVIDO", "DANIFICADO", "PERDIDO"];
+  if (statusDevolucao.includes(status)) {
+    if (!dataDevolucao) {
+      errors.dataDevolucao = ["Data de devolução é obrigatória"];
+    } else {
+      const dataDev = new Date(dataDevolucao);
+      if (isNaN(dataDev.getTime())) {
+        errors.dataDevolucao = ["Data de devolução inválida"];
+      } else if (dataDev > new Date()) {
+        errors.dataDevolucao = ["Data de devolução não pode ser futura"];
+      }
     }
   }
 
@@ -638,14 +789,25 @@ export async function registrarDevolucao(
       };
     }
 
-    if (emprestimo.status === "DEVOLVIDO") {
+    // Verificar se já está em status de devolução
+    if (["DEVOLVIDO", "DANIFICADO", "PERDIDO"].includes(emprestimo.status)) {
       return {
-        errors: { emprestimoId: ["Este empréstimo já foi devolvido"] },
-        message: "Empréstimo já devolvido",
+        errors: { emprestimoId: ["Este empréstimo já foi finalizado"] },
+        message: "Empréstimo já finalizado",
+      };
+    }
+
+    // Verificar se é FORNECIDO (não pode devolver)
+    if (emprestimo.status === "FORNECIDO") {
+      return {
+        errors: { emprestimoId: ["EPI fornecido permanentemente não pode ser devolvido"] },
+        message: "EPI fornecido permanentemente",
       };
     }
 
     const quantDevolvida = parseInt(quantidadeDevolvida);
+    
+    // Verificar quantidade
     if (quantDevolvida > emprestimo.quantidade) {
       return {
         errors: {
@@ -659,27 +821,31 @@ export async function registrarDevolucao(
 
     // Registrar devolução em transação
     await db.$transaction(async (tx) => {
-      // Atualizar estoque da EPI
-      await tx.ePI.update({
-        where: { id: emprestimo.epiId },
-        data: { quantidade: { increment: quantDevolvida } },
-      });
+      // Para status de devolução, restaurar estoque (exceto PERDIDO)
+      if (status !== "PERDIDO" && emprestimo.status !== "FORNECIDO") {
+        await tx.ePI.update({
+          where: { id: emprestimo.epiId },
+          data: { quantidade: { increment: quantDevolvida } },
+        });
+      }
 
-      // Atualizar empréstimo
-      await tx.emprestimo.update({
-        where: { id: emprestimoId },
-        data: {
-          dataDevolucao: new Date(),
-          status: "DEVOLVIDO",
-          // Se devolução parcial, criar novo empréstimo com quantidade restante
-          ...(quantDevolvida < emprestimo.quantidade && {
-            quantidade: quantDevolvida,
-          }),
-        },
-      });
+      // Dados para atualização
+      const updateData: any = {
+        status: status as any,
+        observacao: observacao || emprestimo.observacao,
+      };
 
-      // Se devolução parcial, criar novo empréstimo com quantidade restante
+      // Adicionar dados específicos de devolução
+      if (statusDevolucao.includes(status)) {
+        updateData.dataDevolucao = new Date(dataDevolucao);
+        updateData.observacaoDevolucao = observacaoDevolucao;
+      }
+
+      // Se devolução parcial, atualizar quantidade e criar novo registro
       if (quantDevolvida < emprestimo.quantidade) {
+        updateData.quantidade = quantDevolvida;
+        
+        // Criar novo registro com quantidade restante
         await tx.emprestimo.create({
           data: {
             colaboradorId: emprestimo.colaboradorId,
@@ -687,14 +853,27 @@ export async function registrarDevolucao(
             quantidade: emprestimo.quantidade - quantDevolvida,
             dataEmprestimo: emprestimo.dataEmprestimo,
             dataVencimento: emprestimo.dataVencimento,
-            status: "ATIVO",
+            status: emprestimo.status, // Mantém o status original
+            observacao: emprestimo.observacao,
           },
         });
       }
+
+      // Atualizar empréstimo original
+      await tx.emprestimo.update({
+        where: { id: emprestimoId },
+        data: updateData,
+      });
     });
 
     revalidatePath("/emprestimos");
-    return { success: true, message: "Devolução registrada com sucesso!" };
+    return { 
+      success: true, 
+      message: `Devolução registrada com sucesso! Status: ${
+        status === "DEVOLVIDO" ? "Devolvido" :
+        status === "DANIFICADO" ? "Danificado" : "Perdido"
+      }` 
+    };
   } catch (error) {
     console.error("Erro ao registrar devolução:", error);
     return {
@@ -779,9 +958,9 @@ export async function getRelatoriosData() {
       // Estatísticas gerais
       Promise.all([
         db.emprestimo.count(),
-        db.emprestimo.count({ where: { status: "ATIVO" } }),
+        db.emprestimo.count({ where: { status: "EMPRESTADO" } }),
         db.emprestimo.count({
-          where: { status: "ATIVO", dataVencimento: { lt: new Date() } },
+          where: { status: "EMPRESTADO", dataVencimento: { lt: new Date() } },
         }),
         db.colaborador.count({ where: { ativo: true } }),
         db.ePI.count(),
