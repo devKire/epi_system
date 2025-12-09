@@ -102,7 +102,7 @@ export default function LoginPage() {
           </form>
 
           <div className="text-muted-foreground mt-6 text-center text-sm">
-            <p>Demo: admin@epis.com / admin123</p>
+            <p>Demo: admin@epis.com / 123456 </p>
           </div>
         </CardContent>
       </Card>
