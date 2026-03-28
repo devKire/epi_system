@@ -7,7 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test": "vitest",
+    "test:unit": "vitest",
+    "test:unit:ui": "vitest --ui",
+    "test:unit:coverage": "vitest --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "pretest:e2e": "npm run db:test:setup",
+    "pretest:e2e:ui": "npm run db:test:setup",
+    "db:test:setup": "dotenv -e .env.test -- prisma migrate deploy",
+    "db:test:reset": "dotenv -e .env.test -- prisma migrate reset --force",
+    "db:test:seed": "dotenv -e .env.test -- ts-node prisma/seed.ts",
+    "test:all": "npm run test:unit && npm run test:e2e",
+    "test:ci": "npm run db:test:setup && npm run test:unit && npm run test:e2e"
   },
   "prisma": {
     "seed": "ts-node ./prisma/seed.ts"
@@ -50,19 +65,25 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.1.11",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.19.9",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@typescript-eslint/eslint-plugin": "^8.38.0",
     "@typescript-eslint/parser": "^8.38.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.21",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9.32.0",
     "eslint-config-next": "^15.4.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.3",
     "eslint-plugin-simple-import-sort": "^12.1.1",
+    "jsdom": "^29.0.1",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
@@ -71,6 +92,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tw-animate-css": "^1.3.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2"
   }
 }
